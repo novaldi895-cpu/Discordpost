@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DisPost - Auto Publisher</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+body{font-family:Arial,sans-serif;background:#0b0f19;color:#e2e8f0;margin:0;padding:20px}
+.card{background:#111827;border:1px solid #1f2937;border-radius:12px;padding:20px;margin-bottom:15px}
+input,textarea,select{width:100%;background:#0b0f19;border:1px solid #1f2937;color:#fff;padding:10px;border-radius:8px;box-sizing:border-box;font-size:14px;margin-top:5px}
+button{background:#7c3aed;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-weight:bold;cursor:pointer;font-size:14px}
+button:hover{background:#6d28d9}
+.btn-test{background:#10b981}
+.btn-test:hover{background:#059669}
+.log{background:#000;color:#10b981;padding:12px;border-radius:8px;font-family:monospace;font-size:12px;height:200px;overflow-y:auto;margin-top:10px}
+h1{color:#fff;margin:0 0 5px 0}
+h2{color:#fff;font-size:16px;margin:0 0 10px 0}
+p.sub{color:#9ca3af;font-size:13px;margin:0 0 15px 0}
+label{font-size:12px;color:#9ca3af;display:block;margin-top:10px}
+.status{font-size:12px;color:#10b981;margin-top:5px}
+</style>
+</head>
+<body>
+
+<h1>🚀 DisPost Auto Publisher</h1>
+<p class="sub">Backend: <span id="beurl"></span></p>
+
+<div class="card">
+  <h2>⚡ Instant Test Post</h2>
+  <label>Pesan untuk dikirim ke Discord:</label>
+  <textarea id="msg" rows="3" placeholder="Halo! Ini pesan test dari DisPost."></textarea>
+  <button class="btn-test" onclick="sendNow()" style="margin-top:10px">📤 Kirim ke Discord Sekarang</button>
+</div>
+
+<div class="card">
+  <h2>⏰ Auto-Post Otomatis</h2>
+  <label>Interval (detik):</label>
+  <input type="number" id="interval" value="60" min="30">
+  <label>Pesan berulang:</label>
+  <textarea id="autoMsg" rows="2" placeholder="Pesan otomatis...">Update otomatis jam {time}</textarea>
+  <button onclick="startAuto()" style="margin-top:10px;background:#10b981">▶️ Mulai Auto-Post</button>
+  <button onclick="stopAuto()" style="margin-top:10px;background:#ef4444">⏹️ Stop</button>
+  <p class="status" id="autoStatus">Auto-post: OFF</p>
+</div>
+
+<div class="card">
+  <h2>📜 Log Realtime</h2>
+  <div class="log" id="log">
+    <div>[System] DisPost ready...</div>
+  </div>
+  <button onclick="document.getElementById('log').innerHTML=''" style="margin-top:10px;background:#374151;font-size:12px">Clear Log</button>
+</div>
+
+<script>
+// ======== KONFIGURASI BACKEND ========
+const BACKEND_URL = 'https://discordpost-production.up.railway.app';
+// =====================================
+
+let autoTimer = null;
+let counter = 0;
+
+document.getElementById('beurl').textContent = BACKEND_URL;
+
+function log(msg, color) {
+  const el = document.getElementById('log');
+  const line = document.createElement('div');
+  line.style.color = color || '#10b981';
+  line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+async function sendToDiscord(content) {
+  if (!content || content.trim() === '') {
+    log('❌ Pesan kosong', '#ef4444');
+    return false;
+  }
+  
+  const t0 = Date.now();
+  try {
+    const res = await fetch(BACKEND_URL + '/api/send', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({content: content})
+    });
+    const data = await res.json();
+    const ms = Date.now() - t0;
+    
+    if (data.success) {
+      log(`✅ Terkirim! ID: ${data.messageId} (${ms}ms)`);
+      return true;
+    } else {
+      log(`❌ Gagal: ${data.error || 'Unknown'} (${ms}ms)`, '#ef4444');
+      return false;
+    }
+  } catch (err) {
+    log(`❌ Error: ${err.message}`, '#ef4444');
+    return false;
+  }
+}
+
+function sendNow() {
+  const msg = document.getElementById('msg').value.trim();
+  if (!msg) {
+    alert('Isi pesan dulu!');
+    return;
+  }
+  log('📤 Mengirim pesan manual...', '#f59e0b');
+  sendToDiscord(msg);
+}
+
+function startAuto() {
+  if (autoTimer) {
+    alert('Auto-post sudah jalan!');
+    return;
+  }
+  const interval = parseInt(document.getElementById('interval').value) * 1000;
+  if (interval < 30000) {
+    alert('Minimal 30 detik, biar tidak kena rate limit Discord');
+    return;
+  }
+  
+  log(`▶️ Auto-post dimulai (setiap ${interval/1000}s)`, '#f59e0b');
+  document.getElementById('autoStatus').textContent = 'Auto-post: ON ✅';
+  document.getElementById('autoStatus').style.color = '#10b981';
+  
+  autoTimer = setInterval(() => {
+    counter++;
+    let msg = document.getElementById('autoMsg').value;
+    msg = msg.replace('{time}', new Date().toLocaleTimeString())
+             .replace('{date}', new Date().toLocaleDateString())
+             .replace('{n}', counter);
+    log(`🔄 Auto-post #${counter}...`, '#f59e0b');
+    sendToDiscord(msg);
+  }, interval);
+}
+
+function stopAuto() {
+  if (autoTimer) {
+    clearInterval(autoTimer);
+    autoTimer = null;
+    log('⏹️ Auto-post dihentikan', '#ef4444');
+  }
+  document.getElementById('autoStatus').textContent = 'Auto-post: OFF';
+  document.getElementById('autoStatus').style.color = '#9ca3af';
+}
+
+// Test koneksi backend saat halaman dibuka
+window.onload = async () => {
+  log('🔍 Cek koneksi backend...', '#f59e0b');
+  try {
+    const res = await fetch(BACKEND_URL + '/api/validate');
+    const data = await res.json();
+    if (data.valid) {
+      log(`✅ Backend OK. Login sebagai: ${data.user}`, '#10b981');
+    } else {
+      log(`⚠️ Token invalid: ${data.error}`, '#f59e0b');
+    }
+  } catch (e) {
+    log(`❌ Backend tidak bisa dihubungi: ${e.message}`, '#ef4444');
+  }
+};
+</script>
+
+</body>
+  </html>
